@@ -1,0 +1,250 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AR Beam Marker App</title>
+  <!-- A-Frame for WebXR -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #ui { position: absolute; top: 0; left: 0; z-index: 10; }
+    #ar-scene { width: 100vw; height: 100vh; }
+    .beam { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- UI Overlay -->
+  <div id="ui" class="p-4 bg-gray-800 bg-opacity-50 text-white">
+    <h1 class="text-lg font-bold">AR Beam Marker</h1>
+    <div id="status" class="my-2">Initializing...</div>
+    <div class="flex space-x-2">
+      <select id="beamColor" class="p-2 bg-gray-700 rounded">
+        <option value="red">Red (Danger)</option>
+        <option value="blue">Blue (Waypoint)</option>
+        <option value="green">Green (Loot)</option>
+      </select>
+      <button id="clearBeams" class="p-2 bg-red-600 rounded hover:bg-red-700">Clear All Beams</button>
+    </div>
+  </div>
+
+  <!-- A-Frame Scene -->
+  <a-scene
+    id="ar-scene"
+    vr-mode-ui="enabled: false"
+    arjs="sourceType: webcam; debugUIEnabled: false;"
+    renderer="logarithmicDepthBuffer: true;"
+  >
+    <a-camera gps-camera rotation-reader></a-camera>
+    <a-entity id="beams"></a-entity>
+  </a-scene>
+
+  <script>
+    // Utility: Convert degrees to radians
+    const toRadians = (degrees) => degrees * Math.PI / 180;
+
+    // Haversine formula to calculate distance and bearing
+    function calculatePosition(userLat, userLon, targetLat, targetLon) {
+      const R = 6371000; // Earth radius in meters
+      const dLat = toRadians(targetLat - userLat);
+      const dLon = toRadians(targetLon - userLon);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRadians(userLat)) * Math.cos(toRadians(targetLat)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+
+      const y = Math.sin(dLon) * Math.cos(toRadians(targetLat));
+      const x = Math.cos(toRadians(userLat)) * Math.sin(toRadians(targetLat)) -
+                Math.sin(toRadians(userLat)) * Math.cos(toRadians(targetLat)) * Math.cos(dLon);
+      const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+
+      return { distance, bearing };
+    }
+
+    // App Logic
+    class ARBeamMarkerApp {
+      constructor() {
+        this.scene = document.querySelector('a-scene');
+        this.beamsContainer = document.querySelector('#beams');
+        this.status = document.querySelector('#status');
+        this.beamColorSelect = document.querySelector('#beamColor');
+        this.clearBeamsButton = document.querySelector('#clearBeams');
+        this.userPosition = { lat: null, lon: null, heading: null };
+        this.beams = JSON.parse(localStorage.getItem('beams')) || [];
+        this.init();
+      }
+
+      async init() {
+        // Request permissions
+        try {
+          await navigator.geolocation.getCurrentPosition(() => {}, () => {}, { enableHighAccuracy: true });
+          this.status.textContent = 'Permissions granted. Fetching location...';
+        } catch (err) {
+          this.status.textContent = 'Permission denied. App limited.';
+          return;
+        }
+
+        // Start AR session
+        if (!AFRAME.utils.device.checkARSupport()) {
+          this.status.textContent = 'AR not supported on this device.';
+          return;
+        }
+
+        // Fetch GPS and heading
+        this.watchPosition();
+        this.watchOrientation();
+        this.loadExistingBeams();
+        this.setupEventListeners();
+      }
+
+      watchPosition() {
+        navigator.geolocation.watchPosition(
+          (pos) => {
+            this.userPosition.lat = pos.coords.latitude;
+            this.userPosition.lon = pos.coords.longitude;
+            this.status.textContent = `Location: ${this.userPosition.lat.toFixed(4)}, ${this.userPosition.lon.toFixed(4)}`;
+            this.updateBeams();
+          },
+          (err) => {
+            this.status.textContent = `GPS Error: ${err.message}`;
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        );
+      }
+
+      watchOrientation() {
+        window.addEventListener('deviceorientation', (event) => {
+          this.userPosition.heading = event.alpha || 0;
+          this.updateBeams();
+        });
+      }
+
+      setupEventListeners() {
+        // Tap to place beam
+        this.scene.addEventListener('click', () => this.placeBeam());
+        // Clear all beams
+        this.clearBeamsButton.addEventListener('click', () => this.clearBeams());
+      }
+
+      placeBeam() {
+        if (!this.userPosition.lat || !this.userPosition.lon) {
+          this.status.textContent = 'Waiting for GPS...';
+          return;
+        }
+
+        // Simulate target as 10 meters ahead in the direction user is facing
+        const distance = 10; // meters
+        const bearing = this.userPosition.heading;
+        const R = 6371000; // Earth radius in meters
+        const lat1 = toRadians(this.userPosition.lat);
+        const lon1 = toRadians(this.userPosition.lon);
+        const angularDistance = distance / R;
+        const bearingRad = toRadians(bearing);
+
+        const lat2 = Math.asin(
+          Math.sin(lat1) * Math.cos(angularDistance) +
+          Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad)
+        );
+        const lon2 = lon1 + Math.atan2(
+          Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
+          Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
+        );
+
+        const targetLat = lat2 * 180 / Math.PI;
+        const targetLon = lon2 * 180 / Math.PI;
+
+        const beam = {
+          id: Date.now().toString(),
+          lat: targetLat,
+          lon: targetLon,
+          color: this.beamColorSelect.value
+        };
+
+        this.beams.push(beam);
+        localStorage.setItem('beams', JSON.stringify(this.beams));
+        this.renderBeam(beam);
+      }
+
+      renderBeam(beam) {
+        const entity = document.createElement('a-cylinder');
+        entity.setAttribute('gps-entity-place', `latitude: ${beam.lat}; longitude: ${beam.lon}`);
+        entity.setAttribute('color', beam.color);
+        entity.setAttribute('height', '2');
+        entity.setAttribute('radius', '0.2');
+        entity.setAttribute('position', '0 1 0');
+        entity.setAttribute('class', 'beam');
+        entity.setAttribute('data-id', beam.id);
+        // Delete on click
+        entity.addEventListener('click', () => this.deleteBeam(beam.id));
+        this.beamsContainer.appendChild(entity);
+      }
+
+      updateBeams() {
+        this.beamsContainer.innerHTML = '';
+        this.beams.forEach(beam => this.renderBeam(beam));
+      }
+
+      deleteBeam(id) {
+        this.beams = this.beams.filter(beam => beam.id !== id);
+        localStorage.setItem('beams', JSON.stringify(this.beams));
+        this.updateBeams();
+      }
+
+      clearBeams() {
+        this.beams = [];
+        localStorage.setItem('beams', JSON.stringify(this.beams));
+        this.updateBeams();
+      }
+
+      loadExistingBeams() {
+        this.beams.forEach(beam => this.renderBeam(beam));
+      }
+    }
+
+    // Start the app
+    window.onload = () => new ARBeamMarkerApp();
+  </script>
+</body>
+</html>
