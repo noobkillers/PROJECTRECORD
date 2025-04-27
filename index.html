@@ -4,69 +4,210 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AR Beam Marker App</title>
-  <!-- A-Frame -->
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <!-- AR.js for GPS support -->
-  <script src="https://cdn.jsdelivr.net/gh/jeromeetienne/AR.js@2.3.1/aframe/build/aframe-ar.min.js"></script>
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <!-- Model Viewer for AR -->
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <!-- Leaflet.js for Mini-Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { margin: 0; overflow: hidden; }
+    #ar-view { width: 100vw; height: 100vh; }
     #ui { position: absolute; top: 0; left: 0; z-index: 10; }
-    #ar-scene { width: 100vw; height: 100vh; }
-    .beam { cursor: pointer; }
+    #map { height: 150px; width: 100%; }
+    #beam-label { width: 100px; }
+    model-viewer { width: 100%; height: 100%; }
   </style>
 </head>
 <body>
   <!-- UI -->
   <div id="ui" class="p-4 bg-gray-800 bg-opacity-50 text-white">
     <h1 class="text-lg font-bold">AR Beam Marker</h1>
-    <div id="status" class="my-2">Initializing...</div>
-    <div class="flex space-x-2">
+    <div id="status" class="my-2">Tap to place a beam!</div>
+    <div class="flex space-x-2 mb-2">
       <select id="beamColor" class="p-2 bg-gray-700 rounded">
         <option value="red">Red</option>
         <option value="blue">Blue</option>
         <option value="green">Green</option>
       </select>
+      <input id="beamLabel" type="text" placeholder="Beam name" class="p-2 bg-gray-700 rounded">
       <button id="clearBeams" class="p-2 bg-red-600 rounded hover:bg-red-700">Clear All</button>
     </div>
+    <div id="map"></div>
   </div>
 
-  <!-- A-Frame Scene -->
-  <a-scene
-    id="ar-scene"
-    vr-mode-ui="enabled: false"
-    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
-    renderer="logarithmicDepthBuffer: true;"
-  >
-    <a-camera gps-camera rotation-reader></a-camera>
-    <a-entity id="beams"></a-entity>
-  </a-scene>
+  <!-- AR View -->
+  <model-viewer
+    id="ar-view"
+    camera-controls
+    ar
+    ar-modes="scene-viewer webxr quick-look"
+    src=""
+    style="background: transparent;"
+  ></model-viewer>
 
   <script>
-    // Convert degrees to radians
-    const toRadians = (degrees) => degrees * Math.PI / 180;
+    // Audio for interactivity
+    const placeSound = new Audio('https://cdn.pixabay.com/audio/2022/03/10/audio_5b3b6b3b3b.mp3');
+    const deleteSound = new Audio('https://cdn.pixabay.com/audio/2022/03/10/audio_7b7b7b7b7b.mp3');
 
     // App Logic
     class ARBeamMarkerApp {
       constructor() {
-        this.scene = document.querySelector('a-scene');
-        this.beamsContainer = document.querySelector('#beams');
+        this.arView = document.querySelector('#ar-view');
         this.status = document.querySelector('#status');
         this.beamColorSelect = document.querySelector('#beamColor');
+        this.beamLabelInput = document.querySelector('#beamLabel');
         this.clearBeamsButton = document.querySelector('#clearBeams');
-        this.userPosition = { lat: null, lon: null, heading: null };
+        this.map = L.map('map').setView([0, 0], 13);
         this.beams = JSON.parse(localStorage.getItem('beams')) || [];
+        this.userPosition = { lat: 0, lon: 0 };
         this.init();
       }
 
       async init() {
-        // Check AR support
-        if (!AFRAME.utils.device.checkARSupport()) {
-          this.status.textContent = 'AR not supported. Use Chrome on Android.';
-          return;
-        }
+        // Initialize map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap'
+        }).addTo(this.map);
 
         // Request permissions
         try {
           await navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              this.userPosition.lat = pos.coords.latitude;
+              this.userPosition.lon = pos.coords.longitude;
+              this.map.setView([this.userPosition.lat, this.userPosition.lon], 13);
+              L.marker([this.userPosition.lat, this.userPosition.lon]).addTo(this.map).bindPopup('You');
+              this.status.textContent = 'Ready! Tap to place a beam.';
+            },
+            () => {
+              this.status.textContent = 'Please allow location access.';
+            },
+            { enableHighAccuracy: true }
+          );
+        } catch (err) {
+          this.status.textContent = 'Location permission denied.';
+        }
+
+        // Check AR support
+        if (!this.arView.canActivateAR) {
+          this.status.textContent = 'AR not supported. Use Chrome on Android.';
+        }
+
+        // Load existing beams
+        this.loadExistingBeams();
+        this.setupEventListeners();
+      }
+
+      setupEventListeners() {
+        this.arView.addEventListener('click', () => this.placeBeam());
+        this.clearBeamsButton.addEventListener('click', () => this.clearBeams());
+      }
+
+      placeBeam() {
+        if (!this.userPosition.lat || !this.userPosition.lon) {
+          this.status.textContent = 'Waiting for location...';
+          return;
+        }
+
+        // Create a simple GLTF model for the beam (cylinder with animation)
+        const gltf = `
+          <script type="application/gltf+json">
+          {
+            "asset": {"version": "2.0"},
+            "scenes": [0],
+            "scene": 0,
+            "nodes": [{"mesh": 0, "translation": [0, 1, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "material": 0}]}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 24, "type": "VEC3"}],
+            "bufferViews": [{"buffer": 0, "byteLength": 288}],
+            "buffers": [{"byteLength": 288}],
+            "materials": [{"pbrMetallicRoughness": {"baseColorFactor": [${this.beamColorSelect.value === 'red' ? '1,0,0' : this.beamColorSelect.value === 'blue' ? '0,0,1' : '0,1,0'},1]}}],
+            "animations": [{"channels": [{"sampler": 0, "target": {"node": 0, "path": "scale"}}], "samplers": [{"input": 1, "output": 2, "interpolation": "LINEAR"}]}],
+            "accessors": [{"bufferView": 1, "componentType": 5126, "count": 2, "type": "SCALAR"}, {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC3"}],
+            "bufferViews": [{"buffer": 1, "byteLength": 8}, {"buffer": 2, "byteLength": 24}]
+          }
+          </script>
+        `;
+        const blob = new Blob([gltf], { type: 'model/gltf+json' });
+        const url = URL.createObjectURL(blob);
+
+        // Add beam to AR view
+        const beamId = Date.now().toString();
+        const beamLabel = this.beamLabelInput.value || 'Beam';
+        const beam = {
+          id: beamId,
+          lat: this.userPosition.lat + (Math.random() - 0.5) * 0.0001, // Small offset for map
+          lon: this.userPosition.lon + (Math.random() - 0.5) * 0.0001,
+          color: this.beamColorSelect.value,
+          label: beamLabel,
+          gltfUrl: url
+        };
+
+        this.beams.push(beam);
+        localStorage.setItem('beams', JSON.stringify(this.beams));
+        this.renderBeam(beam);
+        placeSound.play();
+      }
+
+      renderBeam(beam) {
+        const beamElement = document.createElement('model-viewer');
+        beamElement.setAttribute('src', beam.gltfUrl);
+        beamElement.setAttribute('ar', '');
+        beamElement.setAttribute('ar-modes', 'scene-viewer webxr quick-look');
+        beamElement.setAttribute('style', 'position: absolute; width: 0.5m; height: 0.5m;');
+        beamElement.setAttribute('data-id', beam.id);
+        beamElement.addEventListener('click', () => this.deleteBeam(beam.id));
+        this.arView.appendChild(beamElement);
+
+        // Add label
+        const label = document.createElement('div');
+        label.textContent = beam.label;
+        label.style.position = 'absolute';
+        label.style.color = 'white';
+        label.style.background = 'rgba(0,0,0,0.5)';
+        label.style.padding = '2px';
+        this.arView.appendChild(label);
+
+        // Add to map
+        L.marker([beam.lat, beam.lon]).addTo(this.map).bindPopup(beam.label);
+      }
+
+      deleteBeam(id) {
+        this.beams = this.beams.filter(beam => beam.id !== id);
+        localStorage.setItem('beams', JSON.stringify(this.beams));
+        this.updateBeams();
+        deleteSound.play();
+      }
+
+      clearBeams() {
+        this.beams = [];
+        localStorage.setItem('beams', JSON.stringify(this.beams));
+        this.updateBeams();
+        deleteSound.play();
+      }
+
+      updateBeams() {
+        this.arView.innerHTML = '';
+        this.map.eachLayer(layer => {
+          if (layer instanceof L.Marker && layer.getPopup().getContent() !== 'You') {
+            this.map.removeLayer(layer);
+          }
+        });
+        this.beams.forEach(beam => this.renderBeam(beam));
+      }
+
+      loadExistingBeams() {
+        this.beams.forEach(beam => this.renderBeam(beam));
+      }
+    }
+
+    // Start app
+    window.onload = () => new ARBeamMarkerApp();
+  </script>
+</body>
+</html>
