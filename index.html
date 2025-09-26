@@ -23,7 +23,7 @@ h1 {
     color: #00ffea;
     text-shadow: 0 0 20px #00ffea, 0 0 30px #00ffea;
 }
-h2, h3 {
+h2, h3, summary {
     color: #00ffea;
     text-shadow: 0 0 10px #00ffea;
 }
@@ -129,6 +129,12 @@ button:hover {
     width: auto;
     padding: 4px 10px;
     font-size: 0.8em;
+    margin: 0;
+}
+.master-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 canvas {
     background: rgba(0,0,0,0.2);
@@ -142,6 +148,44 @@ footer {
     font-size: 0.8em;
     color: #fff;
     opacity: 0.5;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #00ffea;
+  cursor: pointer;
+  margin-top: -6px;
+  box-shadow: 0 0 10px #00ffea;
+}
+input[type=range]::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #00ffea;
+  cursor: pointer;
+  box-shadow: 0 0 10px #00ffea;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(0, 255, 234, 0.3);
+  border-radius: 5px;
+}
+input[type=range]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(0, 255, 234, 0.3);
+  border-radius: 5px;
 }
 </style>
 <!-- Chosen Palette: Futuristic Teal/Cyan -->
@@ -178,12 +222,20 @@ footer {
         </details>
         
         <details>
-            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Quality Metrics</summary>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 p-2">
-                 <div><label>FTRQ (%)</label><input type="number" id="ftrq" class="quality-input"></div>
-                 <div><label>NCR Count</label><input type="number" id="ncr" class="quality-input"></div>
-                 <div><label>Observation Completion (%)</label><input type="number" id="obsComp" class="quality-input"></div>
+            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Customize Master Scope</summary>
+            <div class="p-2">
+                <div class="grid grid-cols-3 gap-x-4">
+                    <input type="text" id="newMasterName" placeholder="Activity Name" class="col-span-3 sm:col-span-1">
+                    <input type="number" id="newMasterTotal" placeholder="Total Scope" class="col-span-3 sm:col-span-1">
+                    <input type="number" id="newMasterCompleted" placeholder="Completed" class="col-span-3 sm:col-span-1">
+                </div>
+                <button id="addMasterActivityBtn">Add Master Activity</button>
             </div>
+        </details>
+
+        <details>
+            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Quality Metrics</summary>
+            <div id="qualityInputs" class="grid grid-cols-1 p-2"></div>
         </details>
 
         <details>
@@ -193,8 +245,15 @@ footer {
                 <input type="number" id="otherActivityTotal" placeholder="Total Qty" class="col-span-3 sm:col-span-1">
                 <input type="number" id="otherActivityCompleted" placeholder="Completed Qty" class="col-span-3 sm:col-span-1">
             </div>
-            <button id="addOtherActivityBtn">Add Activity</button>
+            <button id="addOtherActivityBtn">Add Other Activity</button>
             <div class="activity-list" id="activityList"></div>
+        </details>
+
+         <details>
+            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Notes / Remarks</summary>
+            <div class="p-2">
+                <textarea id="notes" class="project-detail-input" rows="4" placeholder="Enter daily notes or remarks here..."></textarea>
+            </div>
         </details>
         
         <div class="grid grid-cols-2 gap-4 mt-6">
@@ -206,6 +265,10 @@ footer {
 
     <div class="card">
         <h2>Live Dashboard</h2>
+        <div class="text-center my-4">
+            <h3 class="text-xl">Overall Project Completion</h3>
+            <p id="overallCompletionPercentage" class="text-4xl font-bold text-cyan-300">0%</p>
+        </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <canvas id="completionChart" height="250"></canvas>
             <canvas id="qualityChart" height="250"></canvas>
@@ -217,8 +280,8 @@ footer {
 
 <footer>
     <p>© 2025 <span id="footerProjectName">Futuristic Solar Project</span>. All Rights Reserved.</p>
-    <p>Unauthorized duplication or distribution of this content is strictly prohibited.</p>
-    <p class="mt-2">Hyderabad, Telangana, India | 11:39 AM, Friday, September 26, 2025</p>
+    <p>This site and its content are registered. Unauthorized duplication or distribution is strictly prohibited.</p>
+    <p class="mt-2" id="footerTimestamp">Hyderabad, Telangana, India | 11:56 AM, Friday, September 26, 2025</p>
 </footer>
 
 <script>
@@ -227,7 +290,8 @@ document.addEventListener('DOMContentLoaded', () => {
         projectDetails: {
             projectName: 'Futuristic Solar Project',
             siteEngineer: '',
-            leadEngineer: ''
+            leadEngineer: '',
+            notes: ''
         },
         masterData: [
             { name: 'MW AC', total: 10, completed: 10 },
@@ -261,8 +325,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function render() {
         renderProjectDetails();
         renderMasterDataInputs();
+        renderQualityInputs();
         renderActivityList();
         renderComponentGrid();
+        renderOverallCompletion();
         updateCharts();
         saveState();
     }
@@ -271,6 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('projectName').value = state.projectDetails.projectName;
         document.getElementById('siteEngineer').value = state.projectDetails.siteEngineer;
         document.getElementById('leadEngineer').value = state.projectDetails.leadEngineer;
+        document.getElementById('notes').value = state.projectDetails.notes;
         const projectName = state.projectDetails.projectName || 'Futuristic Solar Dashboard';
         document.getElementById('mainTitle').textContent = projectName;
         document.getElementById('footerProjectName').textContent = projectName;
@@ -280,24 +347,43 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('masterDataInputs');
         container.innerHTML = state.masterData.map((item, index) => `
             <div>
-                <label>${item.name}:</label>
-                <div class="flex gap-2">
-                    <input type="number" data-index="${index}" data-type="total" placeholder="Total" value="${item.total || ''}" class="data-input">
-                    <input type="number" data-index="${index}" data-type="completed" placeholder="Completed" value="${item.completed || ''}" class="data-input">
+                <div class="master-item-header">
+                    <label>${item.name}:</label>
+                    <button class="delete-btn" data-index="${index}" data-type="master">✖</button>
                 </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="number" data-index="${index}" data-type="total" placeholder="Total" value="${item.total || ''}" class="data-input">
+                    <input type="number" data-index="${index}" data-type="completed" placeholder="Completed" value="${item.completed || ''}" class="data-input-number">
+                </div>
+                <input type="range" data-index="${index}" data-type="completed" value="${item.completed || 0}" max="${item.total || 0}" class="data-input-range mt-1">
             </div>
         `).join('');
-        document.getElementById('ftrq').value = state.qualityInputs.ftrq;
-        document.getElementById('ncr').value = state.qualityInputs.ncr;
-        document.getElementById('obsComp').value = state.qualityInputs.obsComp;
     }
-
+    
+    function renderQualityInputs() {
+        const container = document.getElementById('qualityInputs');
+        container.innerHTML = `
+            <div>
+                <label>FTRQ (%): ${state.qualityInputs.ftrq}%</label>
+                <input type="range" id="ftrq" value="${state.qualityInputs.ftrq}" max="100" class="quality-input">
+            </div>
+            <div>
+                <label>NCR Count:</label>
+                <input type="number" id="ncr" value="${state.qualityInputs.ncr}" class="quality-input">
+            </div>
+            <div>
+                <label>Observation Completion (%): ${state.qualityInputs.obsComp}%</label>
+                <input type="range" id="obsComp" value="${state.qualityInputs.obsComp}" max="100" class="quality-input">
+            </div>
+        `;
+    }
+    
     function renderActivityList() {
         const list = document.getElementById('activityList');
         list.innerHTML = state.otherActivities.map((a, i) => `
             <div class="activity-item">
                 <span>${a.name} (${a.completed}/${a.total})</span>
-                <button class="delete-btn" data-index="${i}">X</button>
+                <button class="delete-btn" data-index="${i}" data-type="other">✖</button>
             </div>
         `).join('');
     }
@@ -315,6 +401,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         }).join('');
+    }
+
+    function calculateOverallCompletion() {
+        const allItems = [...state.masterData, ...state.otherActivities].filter(item => item.total > 0);
+        if (allItems.length === 0) return 0;
+        const percentages = allItems.map(item => (item.completed / item.total) * 100);
+        const averageCompletion = percentages.reduce((sum, p) => sum + p, 0) / allItems.length;
+        return averageCompletion;
+    }
+
+    function renderOverallCompletion() {
+        const percentage = calculateOverallCompletion();
+        document.getElementById('overallCompletionPercentage').textContent = `${percentage.toFixed(2)}%`;
     }
     
     function calculateQualityIndex() {
@@ -363,7 +462,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
 
-                // Project Info
                 const infoSheet = workbook.Sheets['Project Info'];
                 if (infoSheet) {
                     const infoData = XLSX.utils.sheet_to_json(infoSheet);
@@ -371,10 +469,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (row.Key === 'Project Name') state.projectDetails.projectName = row.Value;
                         if (row.Key === 'Site Engineer') state.projectDetails.siteEngineer = row.Value;
                         if (row.Key === 'Lead Engineer') state.projectDetails.leadEngineer = row.Value;
+                        if (row.Key === 'Notes') state.projectDetails.notes = row.Value;
                     });
                 }
 
-                // Master Data
                 const masterSheet = workbook.Sheets['Master Data'];
                 if (masterSheet) {
                     const masterData = XLSX.utils.sheet_to_json(masterSheet);
@@ -383,11 +481,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (item) {
                             item.total = parseFloat(row.Total) || 0;
                             item.completed = parseFloat(row.Completed) || 0;
+                        } else {
+                            state.masterData.push({ name: row.Item, total: parseFloat(row.Total) || 0, completed: parseFloat(row.Completed) || 0 });
                         }
                     });
                 }
 
-                // Other Activities
                 const otherSheet = workbook.Sheets['Other Activities'];
                 if (otherSheet) {
                     state.otherActivities = XLSX.utils.sheet_to_json(otherSheet).map(row => ({
@@ -396,8 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         completed: parseFloat(row.Completed) || 0,
                     }));
                 }
-
-                // Quality Summary
+                
                 const qualitySheet = workbook.Sheets['Quality Summary'];
                 if (qualitySheet) {
                     const qualityData = XLSX.utils.sheet_to_json(qualitySheet)[0];
@@ -410,16 +508,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 render();
                 alert('Dashboard updated successfully from Excel!');
-
             } catch (error) {
                 console.error("Error processing Excel file:", error);
                 alert("Could not process the Excel file. Please ensure it is in the correct format.");
             }
         };
         reader.readAsArrayBuffer(file);
-        event.target.value = ''; // Reset file input
+        event.target.value = '';
     }
 
+    document.getElementById('addMasterActivityBtn').addEventListener('click', () => {
+        const name = document.getElementById('newMasterName').value;
+        const total = parseFloat(document.getElementById('newMasterTotal').value) || 0;
+        const completed = parseFloat(document.getElementById('newMasterCompleted').value) || 0;
+        if (name && total > 0) {
+            state.masterData.push({ name, total, completed });
+            document.getElementById('newMasterName').value = '';
+            document.getElementById('newMasterTotal').value = '';
+            document.getElementById('newMasterCompleted').value = '';
+            render();
+        }
+    });
 
     document.getElementById('addOtherActivityBtn').addEventListener('click', () => {
         const name = document.getElementById('otherActivityName').value;
@@ -435,36 +544,43 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelector('.container').addEventListener('input', (e) => {
-        if (e.target.classList.contains('data-input')) {
+        if (e.target.matches('.data-input, .data-input-number, .data-input-range')) {
             const index = parseInt(e.target.dataset.index);
             const type = e.target.dataset.type;
-            state.masterData[index][type] = parseFloat(e.target.value) || 0;
+            const value = parseFloat(e.target.value) || 0;
+            state.masterData[index][type] = value;
             render();
         }
-        if (e.target.classList.contains('quality-input')) {
+        if (e.target.matches('.quality-input')) {
             state.qualityInputs[e.target.id] = parseFloat(e.target.value) || 0;
             render();
         }
-        if (e.target.classList.contains('project-detail-input')) {
+        if (e.target.matches('.project-detail-input')) {
             state.projectDetails[e.target.id] = e.target.value;
             render();
         }
     });
     
-    document.getElementById('activityList').addEventListener('click', (e) => {
+    document.querySelector('.container').addEventListener('click', (e) => {
         if(e.target.classList.contains('delete-btn')) {
-            state.otherActivities.splice(parseInt(e.target.dataset.index), 1);
+            const index = parseInt(e.target.dataset.index);
+            const type = e.target.dataset.type;
+            if (type === 'master') {
+                state.masterData.splice(index, 1);
+            } else if (type === 'other') {
+                state.otherActivities.splice(index, 1);
+            }
             render();
         }
     });
     
     document.getElementById('downloadExcelBtn').addEventListener('click', () => {
         const wb = XLSX.utils.book_new();
-
         const projectInfo = [
             { Key: "Project Name", Value: state.projectDetails.projectName },
             { Key: "Site Engineer", Value: state.projectDetails.siteEngineer },
-            { Key: "Lead Engineer", Value: state.projectDetails.leadEngineer }
+            { Key: "Lead Engineer", Value: state.projectDetails.leadEngineer },
+            { Key: "Notes", Value: state.projectDetails.notes }
         ];
         const wsInfo = XLSX.utils.json_to_sheet(projectInfo);
         XLSX.utils.book_append_sheet(wb, wsInfo, "Project Info");
