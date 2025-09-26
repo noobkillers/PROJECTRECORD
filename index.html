@@ -1,213 +1,408 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Beam Marker App</title>
-  <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-  <!-- Model Viewer for AR -->
-  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-  <!-- Leaflet.js for Mini-Map -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #ar-view { width: 100vw; height: 100vh; }
-    #ui { position: absolute; top: 0; left: 0; z-index: 10; }
-    #map { height: 150px; width: 100%; }
-    #beam-label { width: 100px; }
-    model-viewer { width: 100%; height: 100%; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Futuristic Solar Project Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+body {
+    font-family: 'Orbitron', sans-serif;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    color: #fff;
+    margin: 0;
+    padding: 0;
+}
+h1 {
+    text-align: center;
+    margin: 20px 0;
+    font-size: 2.5em;
+    color: #00ffea;
+    text-shadow: 0 0 20px #00ffea, 0 0 30px #00ffea;
+}
+h2, h3 {
+    color: #00ffea;
+    text-shadow: 0 0 10px #00ffea;
+}
+.container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    padding: 20px;
+    gap: 20px;
+}
+.card {
+    background: rgba(0, 255, 234, 0.05);
+    border: 2px solid rgba(0, 255, 234, 0.3);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 0 20px rgba(0, 255, 234, 0.3);
+    transition: transform 0.3s, box-shadow 0.3s;
+    backdrop-filter: blur(5px);
+}
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 30px rgba(0, 255, 234, 0.6);
+}
+label {
+    display: block;
+    margin: 10px 0 5px;
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+input, textarea, select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 255, 234, 0.5);
+    background-color: rgba(15, 32, 39, 0.8);
+    color: #00ffea;
+    margin-bottom: 10px;
+    font-family: 'Orbitron', sans-serif;
+}
+button {
+    background: #00ffea;
+    color: #000;
+    border: none;
+    padding: 12px 20px;
+    cursor: pointer;
+    border-radius: 10px;
+    font-weight: bold;
+    margin-top: 10px;
+    width: 100%;
+    transition: all 0.3s;
+}
+button:hover {
+    background: #fff;
+    color: #000;
+    transform: scale(1.05);
+    box-shadow: 0 0 20px #00ffea;
+}
+.progress-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+.progress-card {
+    background: rgba(0,0,0,0.3);
+    border: 2px solid rgba(0,255,234,0.3);
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+}
+.progress-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.1);
+    margin-top: 10px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #00ffea, #00ffaa);
+    width: 0%;
+    transition: width 0.5s ease-in-out;
+}
+.activity-list {
+    margin-top: 10px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+.activity-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    background: rgba(15, 32, 39, 0.9);
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+.delete-btn {
+    background: #ff3c6a55;
+    color: #ffc0d5;
+    width: auto;
+    padding: 4px 10px;
+    font-size: 0.8em;
+}
+canvas {
+    background: rgba(0,0,0,0.2);
+    border-radius: 15px;
+    margin-top: 15px;
+}
+</style>
+<!-- Chosen Palette: Futuristic Teal/Cyan -->
+<!-- Application Structure Plan: The dashboard is organized into two main interactive cards: 1) A 'Project Control' card for all data inputs, logically grouped into collapsible sections for project info, master scope, and quality metrics. 2) A 'Live Dashboard' card that provides an immediate visual summary of all inputs through charts and a detailed progress grid. This structure creates a clean and efficient workflow where data entry on one side instantly and automatically updates the visualizations on the other. The application is driven by a unified JavaScript `state` object that persists in localStorage, making it a reactive and reusable tool. -->
+<!-- Visualization & Content Choices: 
+    1. Overall Completion -> Goal: Show a multi-faceted view of project progress. -> Viz: Radar Chart -> Interaction: Updates automatically as progress data is entered. -> Justification: A radar chart is ideal for a futuristic theme and provides a much richer view than a single percentage, allowing for quick comparison of progress across different project areas like civil, mechanical, and electrical works.
+    2. Quality Index -> Goal: Display a single, critical metric for project quality. -> Viz: Gauge Chart (simulated with a doughnut chart) -> Interaction: The gauge updates based on a weighted formula. -> Justification: A gauge provides an immediate and universally understood "health" reading, making the Quality Index a high-impact focal point.
+    3. Component Progress -> Goal: Provide a detailed, granular view of every project item. -> Presentation: A grid of animated progress bars. -> Justification: This gives project managers the detailed component-level view they need, complementing the high-level charts. The animation adds to the futuristic feel and visual feedback. -->
+<!-- CONFIRMATION: NO SVG used. NO Mermaid JS used. -->
 </head>
 <body>
-  <!-- UI -->
-  <div id="ui" class="p-4 bg-gray-800 bg-opacity-50 text-white">
-    <h1 class="text-lg font-bold">AR Beam Marker</h1>
-    <div id="status" class="my-2">Tap to place a beam!</div>
-    <div class="flex space-x-2 mb-2">
-      <select id="beamColor" class="p-2 bg-gray-700 rounded">
-        <option value="red">Red</option>
-        <option value="blue">Blue</option>
-        <option value="green">Green</option>
-      </select>
-      <input id="beamLabel" type="text" placeholder="Beam name" class="p-2 bg-gray-700 rounded">
-      <button id="clearBeams" class="p-2 bg-red-600 rounded hover:bg-red-700">Clear All</button>
+
+<h1 id="mainTitle">Futuristic Solar Dashboard</h1>
+
+<div class="container">
+    <div class="card">
+        <h2>Project Control</h2>
+        
+        <details open>
+            <summary class="text-lg text-cyan-300 cursor-pointer">Project Info</summary>
+            <div class="p-2">
+                <label>Project Name</label>
+                <input type="text" id="projectName" class="project-detail-input">
+                <label>Site Engineer</label>
+                <input type="text" id="siteEngineer" class="project-detail-input">
+                <label>Lead Engineer</label>
+                <input type="text" id="leadEngineer" class="project-detail-input">
+            </div>
+        </details>
+
+        <details open>
+            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Master Scope & Progress</summary>
+            <div id="masterDataInputs" class="grid grid-cols-1 md:grid-cols-2 gap-x-4 p-2"></div>
+        </details>
+        
+        <details>
+            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Quality Metrics</summary>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 p-2">
+                 <div><label>FTRQ (%)</label><input type="number" id="ftrq" class="quality-input"></div>
+                 <div><label>NCR Count</label><input type="number" id="ncr" class="quality-input"></div>
+                 <div><label>Observation Completion (%)</label><input type="number" id="obsComp" class="quality-input"></div>
+            </div>
+        </details>
+
+        <details>
+            <summary class="text-lg text-cyan-300 cursor-pointer mt-4">Other Activities</summary>
+             <div class="grid grid-cols-3 gap-x-4 p-2">
+                <input type="text" id="otherActivityName" placeholder="Activity Name" class="col-span-3 sm:col-span-1">
+                <input type="number" id="otherActivityTotal" placeholder="Total Qty" class="col-span-3 sm:col-span-1">
+                <input type="number" id="otherActivityCompleted" placeholder="Completed Qty" class="col-span-3 sm:col-span-1">
+            </div>
+            <button id="addOtherActivityBtn">Add Activity</button>
+            <div class="activity-list" id="activityList"></div>
+        </details>
+       
+        <button id="downloadExcelBtn" class="mt-6">Download Excel Report</button>
     </div>
-    <div id="map"></div>
-  </div>
 
-  <!-- AR View -->
-  <model-viewer
-    id="ar-view"
-    camera-controls
-    ar
-    ar-modes="scene-viewer webxr quick-look"
-    src=""
-    style="background: transparent;"
-  ></model-viewer>
+    <div class="card">
+        <h2>Live Dashboard</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <canvas id="completionChart" height="250"></canvas>
+            <canvas id="qualityChart" height="250"></canvas>
+        </div>
+        <h3 class="mt-6 text-center">Component Progress</h3>
+        <div class="progress-grid" id="componentGrid"></div>
+    </div>
+</div>
 
-  <script>
-    // Audio for interactivity
-    const placeSound = new Audio('https://cdn.pixabay.com/audio/2022/03/10/audio_5b3b6b3b3b.mp3');
-    const deleteSound = new Audio('https://cdn.pixabay.com/audio/2022/03/10/audio_7b7b7b7b7b.mp3');
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let state = {
+        projectDetails: {
+            projectName: 'Futuristic Solar Project',
+            siteEngineer: '',
+            leadEngineer: ''
+        },
+        masterData: [
+            { name: 'MW AC', total: 10, completed: 10 },
+            { name: 'MW DC', total: 12, completed: 12 },
+            { name: 'Cable (km)', total: 50, completed: 5 },
+            { name: 'Earthing', total: 200, completed: 20 },
+            { name: 'Piles', total: 5000, completed: 500 },
+            { name: 'LA', total: 150, completed: 15 },
+            { name: 'Roads (m)', total: 1000, completed: 100 },
+            { name: 'MMS', total: 2500, completed: 250 },
+            { name: 'Modules', total: 20000, completed: 2000 },
+            { name: 'Fencing (m)', total: 2000, completed: 200 },
+        ],
+        qualityInputs: { ftrq: 100, ncr: 0, obsComp: 100 },
+        otherActivities: []
+    };
 
-    // App Logic
-    class ARBeamMarkerApp {
-      constructor() {
-        this.arView = document.querySelector('#ar-view');
-        this.status = document.querySelector('#status');
-        this.beamColorSelect = document.querySelector('#beamColor');
-        this.beamLabelInput = document.querySelector('#beamLabel');
-        this.clearBeamsButton = document.querySelector('#clearBeams');
-        this.map = L.map('map').setView([0, 0], 13);
-        this.beams = JSON.parse(localStorage.getItem('beams')) || [];
-        this.userPosition = { lat: 0, lon: 0 };
-        this.init();
-      }
+    let completionChart, qualityChart;
 
-      async init() {
-        // Initialize map
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap'
-        }).addTo(this.map);
-
-        // Request permissions
-        try {
-          await navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              this.userPosition.lat = pos.coords.latitude;
-              this.userPosition.lon = pos.coords.longitude;
-              this.map.setView([this.userPosition.lat, this.userPosition.lon], 13);
-              L.marker([this.userPosition.lat, this.userPosition.lon]).addTo(this.map).bindPopup('You');
-              this.status.textContent = 'Ready! Tap to place a beam.';
-            },
-            () => {
-              this.status.textContent = 'Please allow location access.';
-            },
-            { enableHighAccuracy: true }
-          );
-        } catch (err) {
-          this.status.textContent = 'Location permission denied.';
-        }
-
-        // Check AR support
-        if (!this.arView.canActivateAR) {
-          this.status.textContent = 'AR not supported. Use Chrome on Android.';
-        }
-
-        // Load existing beams
-        this.loadExistingBeams();
-        this.setupEventListeners();
-      }
-
-      setupEventListeners() {
-        this.arView.addEventListener('click', () => this.placeBeam());
-        this.clearBeamsButton.addEventListener('click', () => this.clearBeams());
-      }
-
-      placeBeam() {
-        if (!this.userPosition.lat || !this.userPosition.lon) {
-          this.status.textContent = 'Waiting for location...';
-          return;
-        }
-
-        // Create a simple GLTF model for the beam (cylinder with animation)
-        const gltf = `
-          <script type="application/gltf+json">
-          {
-            "asset": {"version": "2.0"},
-            "scenes": [0],
-            "scene": 0,
-            "nodes": [{"mesh": 0, "translation": [0, 1, 0]}],
-            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "material": 0}]}],
-            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 24, "type": "VEC3"}],
-            "bufferViews": [{"buffer": 0, "byteLength": 288}],
-            "buffers": [{"byteLength": 288}],
-            "materials": [{"pbrMetallicRoughness": {"baseColorFactor": [${this.beamColorSelect.value === 'red' ? '1,0,0' : this.beamColorSelect.value === 'blue' ? '0,0,1' : '0,1,0'},1]}}],
-            "animations": [{"channels": [{"sampler": 0, "target": {"node": 0, "path": "scale"}}], "samplers": [{"input": 1, "output": 2, "interpolation": "LINEAR"}]}],
-            "accessors": [{"bufferView": 1, "componentType": 5126, "count": 2, "type": "SCALAR"}, {"bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC3"}],
-            "bufferViews": [{"buffer": 1, "byteLength": 8}, {"buffer": 2, "byteLength": 24}]
-          }
-          </script>
-        `;
-        const blob = new Blob([gltf], { type: 'model/gltf+json' });
-        const url = URL.createObjectURL(blob);
-
-        // Add beam to AR view
-        const beamId = Date.now().toString();
-        const beamLabel = this.beamLabelInput.value || 'Beam';
-        const beam = {
-          id: beamId,
-          lat: this.userPosition.lat + (Math.random() - 0.5) * 0.0001, // Small offset for map
-          lon: this.userPosition.lon + (Math.random() - 0.5) * 0.0001,
-          color: this.beamColorSelect.value,
-          label: beamLabel,
-          gltfUrl: url
-        };
-
-        this.beams.push(beam);
-        localStorage.setItem('beams', JSON.stringify(this.beams));
-        this.renderBeam(beam);
-        placeSound.play();
-      }
-
-      renderBeam(beam) {
-        const beamElement = document.createElement('model-viewer');
-        beamElement.setAttribute('src', beam.gltfUrl);
-        beamElement.setAttribute('ar', '');
-        beamElement.setAttribute('ar-modes', 'scene-viewer webxr quick-look');
-        beamElement.setAttribute('style', 'position: absolute; width: 0.5m; height: 0.5m;');
-        beamElement.setAttribute('data-id', beam.id);
-        beamElement.addEventListener('click', () => this.deleteBeam(beam.id));
-        this.arView.appendChild(beamElement);
-
-        // Add label
-        const label = document.createElement('div');
-        label.textContent = beam.label;
-        label.style.position = 'absolute';
-        label.style.color = 'white';
-        label.style.background = 'rgba(0,0,0,0.5)';
-        label.style.padding = '2px';
-        this.arView.appendChild(label);
-
-        // Add to map
-        L.marker([beam.lat, beam.lon]).addTo(this.map).bindPopup(beam.label);
-      }
-
-      deleteBeam(id) {
-        this.beams = this.beams.filter(beam => beam.id !== id);
-        localStorage.setItem('beams', JSON.stringify(this.beams));
-        this.updateBeams();
-        deleteSound.play();
-      }
-
-      clearBeams() {
-        this.beams = [];
-        localStorage.setItem('beams', JSON.stringify(this.beams));
-        this.updateBeams();
-        deleteSound.play();
-      }
-
-      updateBeams() {
-        this.arView.innerHTML = '';
-        this.map.eachLayer(layer => {
-          if (layer instanceof L.Marker && layer.getPopup().getContent() !== 'You') {
-            this.map.removeLayer(layer);
-          }
-        });
-        this.beams.forEach(beam => this.renderBeam(beam));
-      }
-
-      loadExistingBeams() {
-        this.beams.forEach(beam => this.renderBeam(beam));
-      }
+    function saveState() {
+        localStorage.setItem('futuristicSolarDashboardState', JSON.stringify(state));
     }
 
-    // Start app
-    window.onload = () => new ARBeamMarkerApp();
-  </script>
+    function loadState() {
+        const savedState = localStorage.getItem('futuristicSolarDashboardState');
+        if (savedState) {
+            state = JSON.parse(savedState);
+        }
+    }
+
+    function render() {
+        renderProjectDetails();
+        renderMasterDataInputs();
+        renderActivityList();
+        renderComponentGrid();
+        updateCharts();
+        saveState();
+    }
+    
+    function renderProjectDetails() {
+        document.getElementById('projectName').value = state.projectDetails.projectName;
+        document.getElementById('siteEngineer').value = state.projectDetails.siteEngineer;
+        document.getElementById('leadEngineer').value = state.projectDetails.leadEngineer;
+        document.getElementById('mainTitle').textContent = state.projectDetails.projectName || 'Futuristic Solar Dashboard';
+    }
+
+    function renderMasterDataInputs() {
+        const container = document.getElementById('masterDataInputs');
+        container.innerHTML = state.masterData.map((item, index) => `
+            <div>
+                <label>${item.name}:</label>
+                <div class="flex gap-2">
+                    <input type="number" data-index="${index}" data-type="total" placeholder="Total" value="${item.total || ''}" class="data-input">
+                    <input type="number" data-index="${index}" data-type="completed" placeholder="Completed" value="${item.completed || ''}" class="data-input">
+                </div>
+            </div>
+        `).join('');
+        document.getElementById('ftrq').value = state.qualityInputs.ftrq;
+        document.getElementById('ncr').value = state.qualityInputs.ncr;
+        document.getElementById('obsComp').value = state.qualityInputs.obsComp;
+    }
+
+    function renderActivityList() {
+        const list = document.getElementById('activityList');
+        list.innerHTML = state.otherActivities.map((a, i) => `
+            <div class="activity-item">
+                <span>${a.name} (${a.completed}/${a.total})</span>
+                <button class="delete-btn" data-index="${i}">X</button>
+            </div>
+        `).join('');
+    }
+
+    function renderComponentGrid() {
+        const grid = document.getElementById('componentGrid');
+        const allElements = [...state.masterData, ...state.otherActivities];
+        grid.innerHTML = allElements.map(item => {
+            const percent = Math.min(((item.completed / item.total) * 100) || 0, 100);
+            return `
+                <div class="progress-card">
+                    <strong>${item.name}</strong>
+                    <div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>
+                    <small>${percent.toFixed(1)}%</small>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    function calculateQualityIndex() {
+        const { ftrq, ncr, obsComp } = state.qualityInputs;
+        const maxNCR = 10;
+        const ncrScore = Math.max(0, (1 - ncr / maxNCR) * 100);
+        return Math.round((ftrq * 0.5) + (ncrScore * 0.3) + (obsComp * 0.2));
+    }
+
+    function updateCharts() {
+        const allElements = [...state.masterData, ...state.otherActivities].filter(e => e.total > 0);
+        const labels = allElements.map(e => e.name);
+        const completionData = allElements.map(e => (e.completed / e.total * 100) || 0);
+        const qualityIndex = calculateQualityIndex();
+
+        const chartOptions = {
+            plugins: { legend: { labels: { color: '#e0e0e0', font: { family: 'Orbitron' } } }, title: { display: true, color: '#00ffea', font: { size: 16, family: 'Orbitron' } } },
+            scales: { r: { angleLines: { color: '#00ffea44' }, grid: { color: '#00ffea44' }, pointLabels: { color: '#e0e0e0', font: { size: 10, family: 'Orbitron' } }, ticks: { backdropColor: '#0f2027', color: '#e0e0e0' } } }
+        };
+
+        if (completionChart) completionChart.destroy();
+        completionChart = new Chart(document.getElementById('completionChart').getContext('2d'), {
+            type: 'radar',
+            data: { labels, datasets: [{ label: 'Completion %', data: completionData, backgroundColor: '#00ffea33', borderColor: '#00ffea', pointBackgroundColor: '#00ffea' }] },
+            options: { ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: 'Site Completion by Area' } } }
+        });
+
+        if (qualityChart) qualityChart.destroy();
+        qualityChart = new Chart(document.getElementById('qualityChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: ['Quality Index', ''], datasets: [{ data: [qualityIndex, 100 - qualityIndex], backgroundColor: [`hsl(${qualityIndex * 1.2}, 80%, 50%)`, '#333'], borderColor: '#0f2027', borderWidth: 4 }] },
+            options: {
+                cutout: '70%', rotation: -90, circumference: 180,
+                plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: `Quality Index: ${qualityIndex}%` }, legend: { display: false } }
+            }
+        });
+    }
+
+    document.getElementById('addOtherActivityBtn').addEventListener('click', () => {
+        const name = document.getElementById('otherActivityName').value;
+        const total = parseFloat(document.getElementById('otherActivityTotal').value) || 0;
+        const completed = parseFloat(document.getElementById('otherActivityCompleted').value) || 0;
+        if (name && total > 0) {
+            state.otherActivities.push({ name, total, completed });
+            document.getElementById('otherActivityName').value = '';
+            document.getElementById('otherActivityTotal').value = '';
+            document.getElementById('otherActivityCompleted').value = '';
+            render();
+        }
+    });
+
+    document.querySelector('.container').addEventListener('input', (e) => {
+        if (e.target.classList.contains('data-input')) {
+            const index = parseInt(e.target.dataset.index);
+            const type = e.target.dataset.type;
+            state.masterData[index][type] = parseFloat(e.target.value) || 0;
+            render();
+        }
+        if (e.target.classList.contains('quality-input')) {
+            state.qualityInputs[e.target.id] = parseFloat(e.target.value) || 0;
+            render();
+        }
+        if (e.target.classList.contains('project-detail-input')) {
+            state.projectDetails[e.target.id] = e.target.value;
+            render();
+        }
+    });
+    
+    document.getElementById('activityList').addEventListener('click', (e) => {
+        if(e.target.classList.contains('delete-btn')) {
+            state.otherActivities.splice(parseInt(e.target.dataset.index), 1);
+            render();
+        }
+    });
+    
+    document.getElementById('downloadExcelBtn').addEventListener('click', () => {
+        const wb = XLSX.utils.book_new();
+
+        const projectInfo = [
+            { Key: "Project Name", Value: state.projectDetails.projectName },
+            { Key: "Site Engineer", Value: state.projectDetails.siteEngineer },
+            { Key: "Lead Engineer", Value: state.projectDetails.leadEngineer }
+        ];
+        const wsInfo = XLSX.utils.json_to_sheet(projectInfo);
+        XLSX.utils.book_append_sheet(wb, wsInfo, "Project Info");
+
+        const masterExport = state.masterData.map(d => ({ Item: d.name, Total: d.total, Completed: d.completed, 'Completion %': ((d.completed / d.total) * 100 || 0).toFixed(1) }));
+        const ws1 = XLSX.utils.json_to_sheet(masterExport);
+        XLSX.utils.book_append_sheet(wb, ws1, "Master Data");
+        
+        if (state.otherActivities.length > 0) {
+            const otherExport = state.otherActivities.map(d => ({ Activity: d.name, Total: d.total, Completed: d.completed, 'Completion %': ((d.completed / d.total) * 100 || 0).toFixed(1) }));
+            const ws2 = XLSX.utils.json_to_sheet(otherExport);
+            XLSX.utils.book_append_sheet(wb, ws2, "Other Activities");
+        }
+        
+        const qualityExport = [{ 'Quality Index': calculateQualityIndex() + '%', ...state.qualityInputs }];
+        const ws3 = XLSX.utils.json_to_sheet(qualityExport);
+        XLSX.utils.book_append_sheet(wb, ws3, "Quality Summary");
+
+        XLSX.writeFile(wb, `${state.projectDetails.projectName || 'Solar_Project'}_Dashboard.xlsx`);
+    });
+
+    loadState();
+    render();
+});
+</script>
+
 </body>
 </html>
+
