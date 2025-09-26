@@ -135,6 +135,14 @@ canvas {
     border-radius: 15px;
     margin-top: 15px;
 }
+footer {
+    text-align: center;
+    padding: 20px;
+    margin-top: 20px;
+    font-size: 0.8em;
+    color: #fff;
+    opacity: 0.5;
+}
 </style>
 <!-- Chosen Palette: Futuristic Teal/Cyan -->
 <!-- Application Structure Plan: The dashboard is organized into two main interactive cards: 1) A 'Project Control' card for all data inputs, logically grouped into collapsible sections for project info, master scope, and quality metrics. 2) A 'Live Dashboard' card that provides an immediate visual summary of all inputs through charts and a detailed progress grid. This structure creates a clean and efficient workflow where data entry on one side instantly and automatically updates the visualizations on the other. The application is driven by a unified JavaScript `state` object that persists in localStorage, making it a reactive and reusable tool. -->
@@ -188,8 +196,12 @@ canvas {
             <button id="addOtherActivityBtn">Add Activity</button>
             <div class="activity-list" id="activityList"></div>
         </details>
-       
-        <button id="downloadExcelBtn" class="mt-6">Download Excel Report</button>
+        
+        <div class="grid grid-cols-2 gap-4 mt-6">
+            <button id="importExcelBtn">Import from Excel</button>
+            <button id="downloadExcelBtn">Download Excel Report</button>
+        </div>
+        <input type="file" id="importExcelInput" class="hidden" accept=".xlsx, .xls">
     </div>
 
     <div class="card">
@@ -202,6 +214,12 @@ canvas {
         <div class="progress-grid" id="componentGrid"></div>
     </div>
 </div>
+
+<footer>
+    <p>© 2025 <span id="footerProjectName">Futuristic Solar Project</span>. All Rights Reserved.</p>
+    <p>Unauthorized duplication or distribution of this content is strictly prohibited.</p>
+    <p class="mt-2">Hyderabad, Telangana, India | 11:39 AM, Friday, September 26, 2025</p>
+</footer>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -253,7 +271,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('projectName').value = state.projectDetails.projectName;
         document.getElementById('siteEngineer').value = state.projectDetails.siteEngineer;
         document.getElementById('leadEngineer').value = state.projectDetails.leadEngineer;
-        document.getElementById('mainTitle').textContent = state.projectDetails.projectName || 'Futuristic Solar Dashboard';
+        const projectName = state.projectDetails.projectName || 'Futuristic Solar Dashboard';
+        document.getElementById('mainTitle').textContent = projectName;
+        document.getElementById('footerProjectName').textContent = projectName;
     }
 
     function renderMasterDataInputs() {
@@ -333,6 +353,74 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function handleExcelUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                // Project Info
+                const infoSheet = workbook.Sheets['Project Info'];
+                if (infoSheet) {
+                    const infoData = XLSX.utils.sheet_to_json(infoSheet);
+                    infoData.forEach(row => {
+                        if (row.Key === 'Project Name') state.projectDetails.projectName = row.Value;
+                        if (row.Key === 'Site Engineer') state.projectDetails.siteEngineer = row.Value;
+                        if (row.Key === 'Lead Engineer') state.projectDetails.leadEngineer = row.Value;
+                    });
+                }
+
+                // Master Data
+                const masterSheet = workbook.Sheets['Master Data'];
+                if (masterSheet) {
+                    const masterData = XLSX.utils.sheet_to_json(masterSheet);
+                    masterData.forEach(row => {
+                        const item = state.masterData.find(d => d.name === row.Item);
+                        if (item) {
+                            item.total = parseFloat(row.Total) || 0;
+                            item.completed = parseFloat(row.Completed) || 0;
+                        }
+                    });
+                }
+
+                // Other Activities
+                const otherSheet = workbook.Sheets['Other Activities'];
+                if (otherSheet) {
+                    state.otherActivities = XLSX.utils.sheet_to_json(otherSheet).map(row => ({
+                        name: row.Activity,
+                        total: parseFloat(row.Total) || 0,
+                        completed: parseFloat(row.Completed) || 0,
+                    }));
+                }
+
+                // Quality Summary
+                const qualitySheet = workbook.Sheets['Quality Summary'];
+                if (qualitySheet) {
+                    const qualityData = XLSX.utils.sheet_to_json(qualitySheet)[0];
+                    if (qualityData) {
+                        state.qualityInputs.ftrq = parseFloat(qualityData.ftrq) || 100;
+                        state.qualityInputs.ncr = parseFloat(qualityData.ncr) || 0;
+                        state.qualityInputs.obsComp = parseFloat(qualityData.obsComp) || 100;
+                    }
+                }
+                
+                render();
+                alert('Dashboard updated successfully from Excel!');
+
+            } catch (error) {
+                console.error("Error processing Excel file:", error);
+                alert("Could not process the Excel file. Please ensure it is in the correct format.");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        event.target.value = ''; // Reset file input
+    }
+
+
     document.getElementById('addOtherActivityBtn').addEventListener('click', () => {
         const name = document.getElementById('otherActivityName').value;
         const total = parseFloat(document.getElementById('otherActivityTotal').value) || 0;
@@ -397,6 +485,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         XLSX.writeFile(wb, `${state.projectDetails.projectName || 'Solar_Project'}_Dashboard.xlsx`);
     });
+
+    document.getElementById('importExcelBtn').addEventListener('click', () => {
+        document.getElementById('importExcelInput').click();
+    });
+    document.getElementById('importExcelInput').addEventListener('change', handleExcelUpload);
 
     loadState();
     render();
